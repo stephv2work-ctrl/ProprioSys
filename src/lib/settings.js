@@ -7,7 +7,8 @@ export const DEFAULTS = {
   speech: true,
   haptics: true,
   showBoxes: true,
-  rate: 1.1,
+  rate: 1.0,
+  volume: 0.7, // ProprioSys voice volume, 0.2–1
   minScore: 0.55,
   verbosity: 'normal',
   earbuds: true, // earbud play/pause button controls the app
@@ -17,7 +18,7 @@ export const DEFAULTS = {
   depthModel: 'off',
 };
 
-const RANGES = { rate: [0.7, 1.8], minScore: [0.3, 0.9] };
+const RANGES = { rate: [0.7, 1.8], minScore: [0.3, 0.9], volume: [0.2, 1] };
 const CHOICES = {
   verbosity: ['low', 'normal', 'high'],
   objectModel: OBJECT_MODELS.map((m) => m.id),

@@ -153,12 +153,16 @@ export default function SettingsSheet({ settings, onChange, onVoiceChange, depth
         />
 
         <fieldset className="py-3">
-          <legend className="text-lg font-medium">How often to speak</legend>
+          <legend className="text-lg font-medium">How much to say</legend>
           <div className="mt-2 grid grid-cols-3 gap-2">
-            {['low', 'normal', 'high'].map((v) => (
+            {[
+              ['low', 'Quiet'],
+              ['normal', 'Normal'],
+              ['high', 'Detailed'],
+            ].map(([v, text]) => (
               <label
                 key={v}
-                className="cursor-pointer rounded-xl bg-white/10 py-3 text-center font-semibold capitalize has-[:checked]:bg-accent has-[:checked]:text-accent-ink has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-accent/50"
+                className="cursor-pointer rounded-xl bg-white/10 py-3 text-center font-semibold has-[:checked]:bg-accent has-[:checked]:text-accent-ink has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-accent/50"
               >
                 <input
                   type="radio"
@@ -168,12 +172,21 @@ export default function SettingsSheet({ settings, onChange, onVoiceChange, depth
                   onChange={() => onChange({ verbosity: v })}
                   className="sr-only"
                 />
-                {v}
+                {text}
               </label>
             ))}
           </div>
         </fieldset>
 
+        <Slider
+          label="Voice volume"
+          value={settings.volume}
+          display={`${Math.round(settings.volume * 100)}%`}
+          min={0.2}
+          max={1}
+          step={0.05}
+          onChange={(v) => onChange({ volume: v })}
+        />
         <Slider
           label="Speech rate"
           value={settings.rate}

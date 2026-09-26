@@ -16,6 +16,7 @@ export const HELP_SECTIONS = [
       'Objects that fill much of the view are called close or very close.',
       'Tap anywhere, or press Describe scene, to hear everything in view.',
       'Pause stops announcements and turns the camera off until you resume. Tapping the screen while paused resumes.',
+      'Live mode only mentions nearby or larger objects, and only when something new appears or moves. For more detail, set How much to say to Detailed in Settings; for less, choose Quiet.',
     ],
   },
   {
@@ -32,6 +33,7 @@ export const HELP_SECTIONS = [
     title: 'Voice',
     items: [
       'You can hear announcements through the ProprioSys voice or through your own screen reader, but not both at once. Change this in Settings.',
+      'Voice volume and speech rate are in Settings.',
       'If the voice is off and you are not using a screen reader, tap the screen three times quickly in Live mode, or press V, to turn it back on.',
     ],
   },

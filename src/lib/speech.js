@@ -22,11 +22,17 @@ if (synth) {
 let startedAt = 0;
 const STUCK_MS = 7000; // Safari occasionally leaves `speaking` stuck true
 
-function utterance(text, rate) {
+// Voice defaults, set from Settings via speaker.configure(). A slightly lower
+// pitch and reduced volume make the constant narration less harsh.
+const voiceOpts = { rate: 1, volume: 0.7, pitch: 0.95 };
+
+function utterance(text, rate = voiceOpts.rate) {
   const u = new SpeechSynthesisUtterance(text);
   if (voice) u.voice = voice;
   u.lang = voice?.lang || 'en-US';
   u.rate = rate;
+  u.volume = voiceOpts.volume;
+  u.pitch = voiceOpts.pitch;
   return u;
 }
 
@@ -42,7 +48,12 @@ export const speaker = {
   },
 
   /** Returns true if the utterance was queued; non-urgent speech never interrupts. */
-  say(text, { urgent = false, rate = 1 } = {}) {
+  /** Sets the defaults every utterance uses (rate, volume 0–1, pitch). */
+  configure(opts) {
+    Object.assign(voiceOpts, opts);
+  },
+
+  say(text, { urgent = false, rate = voiceOpts.rate } = {}) {
     if (!synth) return false;
     const busy = synth.speaking || synth.pending;
     if (busy) {
@@ -60,7 +71,7 @@ export const speaker = {
    * begins and `onEnd()` after the last. Returns `{ stop }`; a stopped sequence
    * never calls back again.
    */
-  sequence(texts, { rate = 1, startAt = 0, gapMs = 300, onStep, onEnd } = {}) {
+  sequence(texts, { rate = voiceOpts.rate, startAt = 0, gapMs = 300, onStep, onEnd } = {}) {
     let stopped = false;
     let timer = 0;
     if (!synth) {
