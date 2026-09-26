@@ -53,7 +53,20 @@ while the voice was busy is retried on the next frame instead of being lost.
 
 ## Accessibility
 
-- The whole screen is a "describe everything" button; the controls are large with a high-contrast yellow accent.
-- Turning off built-in speech switches captions to `aria-live`, so TalkBack/VoiceOver users hear
-  announcements through their screen reader, without double-speaking.
+- **Voice or screen reader:** on first launch the app asks whether announcements should use the
+  ProprioSys voice or the user's screen reader (TalkBack / VoiceOver). The two never talk at once:
+  in screen-reader mode everything goes through ARIA live regions (`src/lib/screenReader.js`).
+- **Familiar controls:** the whole screen is a tap target, and so is the start screen. Earbud
+  play/pause triggers the main action (Media Session API, `src/lib/mediaButtons.js`); double/triple
+  press moves through a Canvas walkthrough. Keyboard and switch-access users get Space/Enter,
+  ←/→, P (pause), M (mode), S (settings) and H (help).
+- **Standard widgets:** Settings and Help are native `<dialog>`s (focus trap, Escape/back
+  closes). The Live/Canvas switch is an ARIA radio group with arrow keys. The Canvas step slider
+  is a native range input, so screen readers adjust it with their usual swipe up/down gesture.
+- **Help:** a first-run spoken tutorial and a Help sheet with a "Play spoken guide" button
+  (`src/lib/guide.js`).
+- **Home-screen shortcuts:** long-press the installed icon for Live or Canvas (`/?mode=canvas`).
+- Buttons show visible text that matches their accessible names, so Voice Control / Voice Access
+  commands like "Tap Describe scene" work. The status pill is not a live region, so fps updates
+  are never read aloud.
 - Distance is estimated from box size and is approximate. This is not a mobility aid.

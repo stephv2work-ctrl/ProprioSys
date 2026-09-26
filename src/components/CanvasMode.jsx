@@ -3,6 +3,7 @@ import { buildWalkthrough } from '../lib/walkthrough.js';
 import { drawSnapshot } from '../lib/draw.js';
 import { speaker } from '../lib/speech.js';
 import { haptics } from '../lib/haptics.js';
+import { srAnnounce } from '../lib/screenReader.js';
 import { PauseIcon, PlayIcon } from './icons.jsx';
 
 // COCO-SSD downsamples to 300×300, so the video frame is already more resolution
@@ -18,7 +19,7 @@ function captureFrame(video) {
 const SWIPE_PX = 50;
 const TAP_PX = 15;
 
-export default function CanvasMode({ videoRef, model, settings }) {
+export default function CanvasMode({ videoRef, model, settings, controlsRef }) {
   const viewRef = useRef(null);
   const snapRef = useRef(null);
   const seqRef = useRef(null);
@@ -48,8 +49,11 @@ export default function CanvasMode({ videoRef, model, settings }) {
     const s = settingsRef.current;
     setStep(from);
     if (!s.speech || !speaker.supported) {
+      // Screen-reader users step through manually; announce where they are.
       seqRef.current = null;
       setPlaying(false);
+      const hint = from === 0 && list.length > 1 ? ' Use Next or the step slider to hear each item.' : '';
+      srAnnounce(`${list[from].text}${hint}`);
       return;
     }
     setPlaying(true);
@@ -108,7 +112,7 @@ export default function CanvasMode({ videoRef, model, settings }) {
     }
   };
 
-  const go = (i) => {
+  const go = (i, { fromSlider = false } = {}) => {
     if (!steps.length) return;
     const n = Math.min(steps.length - 1, Math.max(0, i));
     if (playing) {
@@ -118,6 +122,8 @@ export default function CanvasMode({ videoRef, model, settings }) {
     setStep(n);
     const s = settingsRef.current;
     if (s.speech) speaker.say(steps[n].text, { urgent: true, rate: s.rate });
+    // The slider's aria-valuetext is already read by the screen reader.
+    else if (!fromSlider) srAnnounce(steps[n].text);
     if (s.haptics) haptics.pulse([30], 0);
   };
 
@@ -133,6 +139,18 @@ export default function CanvasMode({ videoRef, model, settings }) {
     setPreds([]);
     setStep(0);
   };
+
+  // Earbud buttons and keyboard shortcuts (wired up in App) act through this.
+  useEffect(() => {
+    if (!controlsRef) return;
+    controlsRef.current = {
+      primary: phase === 'ready' ? capture : phase === 'walkthrough' ? togglePlay : () => {},
+      togglePlay: phase === 'walkthrough' ? togglePlay : () => {},
+      next: () => go(step + 1),
+      prev: () => go(step - 1),
+    };
+  });
+  useEffect(() => () => controlsRef && (controlsRef.current = null), [controlsRef]);
 
   // Swipe left/right = next/previous, tap = play/pause.
   const onPointerDown = (e) => {
@@ -160,6 +178,7 @@ export default function CanvasMode({ videoRef, model, settings }) {
           disabled={!model}
           className="absolute inset-0 h-full w-full cursor-pointer focus:outline-none"
           aria-label="Take photo for an audio walkthrough"
+          tabIndex={-1}
         />
         <footer className="pb-safe pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pt-16">
           {error && (
@@ -193,7 +212,7 @@ export default function CanvasMode({ videoRef, model, settings }) {
         onPointerUp={onPointerUp}
         onPointerCancel={() => (pointerRef.current = null)}
         role="img"
-        aria-label="Captured photo. Swipe left or right to move between items, tap to play or pause."
+        aria-label="Captured photo with the described objects highlighted"
       />
       <footer className="pb-safe pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-3 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 pt-16">
         {phase === 'analyzing' ? (
@@ -202,11 +221,26 @@ export default function CanvasMode({ videoRef, model, settings }) {
           </p>
         ) : (
           <>
-            <p className="text-center text-sm font-medium text-white/70 tabular-nums">
-              {step + 1} of {steps.length}
-            </p>
+            {steps.length > 1 && (
+              <label className="pointer-events-auto block">
+                <span className="block text-center text-sm font-medium text-white/70 tabular-nums">
+                  Step {step + 1} of {steps.length}
+                </span>
+                {/* Native range: screen readers adjust it with their standard swipe up/down gesture. */}
+                <input
+                  type="range"
+                  min={1}
+                  max={steps.length}
+                  step={1}
+                  value={step + 1}
+                  aria-label="Walkthrough step"
+                  aria-valuetext={`Step ${step + 1} of ${steps.length}: ${current?.text ?? ''}`}
+                  onChange={(e) => go(Number(e.target.value) - 1, { fromSlider: true })}
+                  className="mt-1 w-full accent-[var(--color-accent)]"
+                />
+              </label>
+            )}
             <p
-              aria-live={settings.speech ? 'off' : 'polite'}
               className="min-h-[3.5rem] text-center text-xl leading-snug font-semibold text-balance drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
             >
               {current?.text}
@@ -218,10 +252,10 @@ export default function CanvasMode({ videoRef, model, settings }) {
               <button
                 type="button"
                 onClick={togglePlay}
-                className="grid h-16 place-items-center rounded-2xl bg-accent text-accent-ink active:brightness-90 focus-visible:ring-4 focus-visible:ring-white focus-visible:outline-none"
-                aria-label={playing ? 'Pause walkthrough' : 'Play walkthrough'}
+                className="flex h-16 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-accent-ink active:brightness-90 focus-visible:ring-4 focus-visible:ring-white focus-visible:outline-none"
               >
-                {playing ? <PauseIcon className="h-7 w-7" /> : <PlayIcon className="h-7 w-7" />}
+                {playing ? <PauseIcon className="h-6 w-6" /> : <PlayIcon className="h-6 w-6" />}
+                {playing ? 'Pause' : 'Play'}
               </button>
               <button
                 type="button"
