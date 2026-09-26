@@ -10,6 +10,7 @@ import { haptics } from './lib/haptics.js';
 import { clearCanvas, drawDetections } from './lib/draw.js';
 import StartScreen from './components/StartScreen.jsx';
 import SettingsSheet from './components/SettingsSheet.jsx';
+import CanvasMode from './components/CanvasMode.jsx';
 import { GearIcon, PauseIcon, PlayIcon } from './components/icons.jsx';
 
 export default function App() {
@@ -33,11 +34,12 @@ export default function App() {
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [mode, setMode] = useState('live'); // live | canvas
   const [caption, setCaption] = useState('');
   const [stats, setStats] = useState({ fps: 0, ms: 0 });
 
   const live = started && camera.status === 'ready';
-  const running = live && !paused && detector.status === 'ready';
+  const running = live && mode === 'live' && !paused && detector.status === 'ready';
   useWakeLock(live && !paused);
 
   const onFrame = useCallback((preds, inferMs) => {
@@ -127,13 +129,28 @@ export default function App() {
     }
   };
 
+  const switchMode = (next) => {
+    if (next === mode) return;
+    speaker.cancel();
+    setCaption('');
+    setMode(next);
+    if (settings.speech) {
+      speaker.say(next === 'canvas' ? 'Canvas mode. Tap anywhere to take a photo.' : 'Live mode.', {
+        urgent: true,
+        rate: settings.rate,
+      });
+    }
+  };
+
   const showStart = !live;
   const statusText =
     detector.status === 'loading'
-      ? 'Loading model…'
+      ? 'Loading Vision Model…'
       : detector.status === 'error'
         ? 'Model error'
-        : paused
+        : mode === 'canvas'
+          ? `Model loaded · ${detector.backend}`
+          : paused
           ? 'Paused'
           : `${stats.fps} fps · ${stats.ms} ms · ${detector.backend}`;
 
@@ -149,7 +166,7 @@ export default function App() {
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true" />
 
       {/* Whole-screen tap target: the most reliable gesture for a blind user. */}
-      {live && (
+      {live && mode === 'live' && (
         <button
           type="button"
           onClick={describe}
@@ -158,13 +175,17 @@ export default function App() {
         />
       )}
 
+      {live && mode === 'canvas' && (
+        <CanvasMode videoRef={videoRef} model={detector.model} settings={settings} />
+      )}
+
       {live && (
         <>
           <header className="pt-safe pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between gap-3 bg-gradient-to-b from-black/80 to-transparent px-4 pb-8">
             <div className="flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-sm font-medium tabular-nums backdrop-blur">
               <span
                 className={`h-2.5 w-2.5 rounded-full ${
-                  running ? 'bg-green-400' : detector.status === 'error' ? 'bg-red-400' : 'bg-accent'
+                  running || (mode === 'canvas' && detector.status === 'ready') ? 'bg-green-400' : detector.status === 'error' ? 'bg-red-400' : 'bg-accent'
                 }`}
                 aria-hidden="true"
               />
@@ -180,44 +201,70 @@ export default function App() {
             </button>
           </header>
 
-          <footer className="pb-safe pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pt-16">
-            {detector.status === 'error' && (
-              <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-2xl bg-red-500/90 px-4 py-3 text-base font-medium">
-                <span>{detector.error}</span>
-                <button type="button" onClick={detector.retry} className="rounded-full bg-black/30 px-4 py-2 font-semibold">
-                  Retry
+          <div
+            role="radiogroup"
+            aria-label="Mode"
+            className="absolute top-[calc(max(0.75rem,env(safe-area-inset-top))+3.75rem)] left-1/2 grid -translate-x-1/2 grid-cols-2 rounded-full bg-black/60 p-1 backdrop-blur"
+          >
+            {[
+              ['live', 'Live'],
+              ['canvas', 'Canvas'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={mode === value}
+                onClick={() => switchMode(value)}
+                className={`min-w-24 rounded-full px-5 py-2.5 font-semibold focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none ${
+                  mode === value ? 'bg-accent text-accent-ink' : 'text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {mode === 'live' && (
+            <footer className="pb-safe pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pt-16">
+              {detector.status === 'error' && (
+                <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-2xl bg-red-500/90 px-4 py-3 text-base font-medium">
+                  <span>{detector.error}</span>
+                  <button type="button" onClick={detector.retry} className="rounded-full bg-black/30 px-4 py-2 font-semibold">
+                    Retry
+                  </button>
+                </div>
+              )}
+  
+              {/* Screen-reader users who turn off the built-in voice get announcements via aria-live instead. */}
+              <p
+                aria-live={settings.speech ? 'off' : 'polite'}
+                className="min-h-[3.5rem] text-center text-xl leading-snug font-semibold text-balance drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
+              >
+                {caption || (running ? 'Scanning… tap anywhere for a full description.' : '')}
+              </p>
+  
+              <div className="pointer-events-auto flex items-stretch gap-3">
+                <button
+                  type="button"
+                  onClick={togglePause}
+                  className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-white/15 backdrop-blur active:bg-white/25 focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none"
+                  aria-label={paused ? 'Resume detection' : 'Pause detection'}
+                  aria-pressed={paused}
+                >
+                  {paused ? <PlayIcon className="h-7 w-7" /> : <PauseIcon className="h-7 w-7" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={describe}
+                  disabled={!running}
+                  className="h-16 flex-1 rounded-2xl bg-accent text-lg font-bold text-accent-ink active:brightness-90 disabled:opacity-40 focus-visible:ring-4 focus-visible:ring-white focus-visible:outline-none"
+                >
+                  Describe scene
                 </button>
               </div>
-            )}
-
-            {/* Screen-reader users who turn off the built-in voice get announcements via aria-live instead. */}
-            <p
-              aria-live={settings.speech ? 'off' : 'polite'}
-              className="min-h-[3.5rem] text-center text-xl leading-snug font-semibold text-balance drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
-            >
-              {caption || (running ? 'Scanning… tap anywhere for a full description.' : '')}
-            </p>
-
-            <div className="pointer-events-auto flex items-stretch gap-3">
-              <button
-                type="button"
-                onClick={togglePause}
-                className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-white/15 backdrop-blur active:bg-white/25 focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none"
-                aria-label={paused ? 'Resume detection' : 'Pause detection'}
-                aria-pressed={paused}
-              >
-                {paused ? <PlayIcon className="h-7 w-7" /> : <PauseIcon className="h-7 w-7" />}
-              </button>
-              <button
-                type="button"
-                onClick={describe}
-                disabled={!running}
-                className="h-16 flex-1 rounded-2xl bg-accent text-lg font-bold text-accent-ink active:brightness-90 disabled:opacity-40 focus-visible:ring-4 focus-visible:ring-white focus-visible:outline-none"
-              >
-                Describe scene
-              </button>
-            </div>
-          </footer>
+            </footer>
+          )}
         </>
       )}
 
