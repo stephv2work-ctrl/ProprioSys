@@ -50,6 +50,13 @@ export default defineConfig(({ mode }) => ({
             url: '/?mode=canvas',
             icons: [{ src: 'pwa-192.png', sizes: '192x192', type: 'image/png' }],
           },
+          {
+            name: 'Finder mode',
+            short_name: 'Finder',
+            description: 'Find one particular object',
+            url: '/?mode=finder',
+            icons: [{ src: 'pwa-192.png', sizes: '192x192', type: 'image/png' }],
+          },
         ],
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },

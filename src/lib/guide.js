@@ -4,7 +4,7 @@ export const INTRO = [
   'Welcome to ProprioSys.',
   'Hold your phone upright at chest height, with the camera facing forward. I will tell you about objects as they come into view.',
   'Tap anywhere on the screen to hear everything in view.',
-  'To take a photo and hear a guided walkthrough, switch to Canvas mode at the top of the screen.',
+  'To take a photo and hear a guided walkthrough, switch to Canvas mode at the top of the screen. To look for one particular thing, use Finder mode.',
   'For help at any time, use the Help button at the top right.',
 ];
 
@@ -30,6 +30,14 @@ export const HELP_SECTIONS = [
     ],
   },
   {
+    title: 'Finder mode',
+    items: [
+      'Choose one object, like a cup or a chair. ProprioSys then speaks only about that object.',
+      'It tells you the clock direction and whether it is close, and says when it goes out of view.',
+      'A short tick means it is straight ahead. Tap anywhere, or press Where is it, to hear its position now.',
+    ],
+  },
+  {
     title: 'Voice',
     items: [
       'You can hear announcements through the ProprioSys voice or through your own screen reader, but not both at once. Change this in Settings.',
@@ -48,8 +56,9 @@ export const HELP_SECTIONS = [
   {
     title: 'Earbuds and keyboard',
     items: [
-      'Earbud play or pause button: describe the scene in Live mode, or take a photo and play or pause in Canvas mode. If Live mode is paused, it resumes.',
-      'Earbud double press: describe in Live mode, next item in Canvas mode. Triple press: previous item in Canvas mode.',
+      'Earbud play or pause button: describe the scene in Live mode, take a photo or play and pause in Canvas mode, or say where the object is in Finder mode.',
+      'Earbud double press: switch mode, from Live to Canvas to Finder and back.',
+      'Earbud triple press: describe in Live mode, next item in Canvas mode, where it is in Finder mode.',
       'Keyboard: Space or Enter to describe or capture, left and right arrows to move between Canvas items, P to pause, M to switch mode, V to turn the voice on or off, S for settings, H for help.',
     ],
   },

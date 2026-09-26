@@ -2,6 +2,7 @@
 // values can be stale (a model later renamed or removed) or malformed, so every
 // field is checked against its expected type, range or list of options.
 import { DEPTH_MODELS, OBJECT_MODELS } from './models.js';
+import { ALL_TARGETS } from './finder.js';
 
 export const DEFAULTS = {
   speech: true,
@@ -16,6 +17,7 @@ export const DEFAULTS = {
   tutorialDone: false,
   objectModel: 'fast', // see lib/models.js
   depthModel: 'off',
+  finderTarget: '', // Finder mode's object ('' = not chosen yet)
 };
 
 const RANGES = { rate: [0.7, 1.8], minScore: [0.3, 0.9], volume: [0.2, 1] };
@@ -23,6 +25,7 @@ const CHOICES = {
   verbosity: ['low', 'normal', 'high'],
   objectModel: OBJECT_MODELS.map((m) => m.id),
   depthModel: DEPTH_MODELS.map((m) => m.id),
+  finderTarget: ['', ...ALL_TARGETS],
 };
 
 export function normalizeSettings(saved) {

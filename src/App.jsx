@@ -8,6 +8,8 @@ import { useWakeLock } from './hooks/useWakeLock.js';
 import { useSettings } from './hooks/useSettings.js';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { Announcer, VERBOSITY, describeScene } from './lib/announcer.js';
+import { Finder } from './lib/finder.js';
+import { nounPhrase, spoken } from './lib/walkthrough.js';
 import { speaker } from './lib/speech.js';
 import { haptics } from './lib/haptics.js';
 import { srAnnounce } from './lib/screenReader.js';
@@ -19,16 +21,22 @@ import StartScreen from './components/StartScreen.jsx';
 import SettingsSheet from './components/SettingsSheet.jsx';
 import HelpSheet from './components/HelpSheet.jsx';
 import CanvasMode from './components/CanvasMode.jsx';
+import FinderSheet from './components/FinderSheet.jsx';
 import LiveRegions from './components/LiveRegions.jsx';
 import { GearIcon, PauseIcon, PlayIcon } from './components/icons.jsx';
 
 const MODES = [
   ['live', 'Live'],
   ['canvas', 'Canvas'],
+  ['finder', 'Finder'],
 ];
+const MODE_IDS = MODES.map(([id]) => id);
 
-// Home-screen shortcuts (manifest) open /?mode=canvas.
-const initialMode = () => (new URLSearchParams(window.location.search).get('mode') === 'canvas' ? 'canvas' : 'live');
+// Home-screen shortcuts (manifest) open /?mode=canvas or /?mode=finder.
+const initialMode = () => {
+  const m = new URLSearchParams(window.location.search).get('mode');
+  return MODE_IDS.includes(m) ? m : 'live';
+};
 
 export default function App() {
   const videoRef = useRef(null);
@@ -37,6 +45,8 @@ export default function App() {
   const modeButtonsRef = useRef({});
   const announcerRef = useRef(null);
   if (!announcerRef.current) announcerRef.current = new Announcer();
+  const finderRef = useRef(null);
+  if (!finderRef.current) finderRef.current = new Finder();
   const latestRef = useRef({ preds: [], w: 0, h: 0 });
   const statsRef = useRef({ frames: 0, ms: 0, since: 0 });
   const quietUntilRef = useRef(0); // holds live announcements while the screen reader reads the tutorial
@@ -56,13 +66,22 @@ export default function App() {
   const depth = useDepthModel(settings.depthModel);
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [sheet, setSheet] = useState(null); // null | 'settings' | 'help'
+  const [sheet, setSheet] = useState(null); // null | 'settings' | 'help' | 'finder'
   const [mode, setMode] = useState(initialMode);
+  const modeRef = useRef(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+  const target = settings.finderTarget || null;
+  useEffect(() => {
+    finderRef.current.setTarget(target);
+  }, [target]);
   const [caption, setCaption] = useState('');
   const [stats, setStats] = useState({ fps: 0, ms: 0 });
 
   const live = started && camera.status === 'ready';
-  const running = live && mode === 'live' && !paused && detector.status === 'ready';
+  // Live and Finder both scan continuously; Canvas works on single photos.
+  const running = live && mode !== 'canvas' && !paused && detector.status === 'ready';
   // Pause only applies to Live mode; Canvas keeps the screen on.
   useWakeLock(live && (mode === 'canvas' || !paused));
 
@@ -85,10 +104,11 @@ export default function App() {
 
       if (s.showBoxes) drawDetections(canvasRef.current, video, preds);
 
-      const announcer = announcerRef.current;
-      const plan = now < quietUntilRef.current ? null : announcer.evaluate(preds, w, h, now);
+      // Finder speaks only about its target; Live uses the general announcer.
+      const engine = modeRef.current === 'finder' ? finderRef.current : announcerRef.current;
+      const plan = now < quietUntilRef.current ? null : engine.evaluate(preds, w, h, now);
       if (plan && say(plan.text, { urgent: plan.urgent })) {
-        announcer.commit(plan, now);
+        engine.commit(plan, now);
         setCaption(plan.text);
         if (s.haptics && plan.haptic) haptics.pulse(plan.haptic, plan.urgent ? 0 : 600);
       }
@@ -120,6 +140,7 @@ export default function App() {
     if (running) return;
     clearCanvas(canvasRef.current);
     announcerRef.current.reset();
+    finderRef.current.setTarget(finderRef.current.target);
     latestRef.current = { preds: [], w: 0, h: 0 };
     statsRef.current = { frames: 0, ms: 0, since: performance.now() };
   }, [running]);
@@ -230,7 +251,32 @@ export default function App() {
         return;
       }
     }
-    describe();
+    if (modeRef.current === 'finder') whereIs();
+    else describe();
+  };
+
+  /** Finder: say where the target is right now (or that it isn't in view). */
+  const whereIs = () => {
+    if (paused) {
+      togglePause();
+      return;
+    }
+    if (!target) {
+      setSheet('finder');
+      return;
+    }
+    const { preds, w, h } = latestRef.current;
+    const text = finderRef.current.describe(preds, w, h);
+    setCaption(text);
+    say(text, { urgent: true });
+    if (settings.haptics) haptics.pulse([30], 0);
+  };
+
+  const pickTarget = (label) => {
+    updateSettings({ finderTarget: label });
+    setSheet(null);
+    setCaption('');
+    say(`Looking for ${nounPhrase(label, 1)}.`, { urgent: true });
   };
 
   const describe = () => {
@@ -256,29 +302,46 @@ export default function App() {
       camera.setEnabled(true);
     }
     setMode(next);
-    say(next === 'canvas' ? 'Canvas mode.' : 'Live mode.', { urgent: true });
+    if (next === 'finder') {
+      if (target) say(`Finder mode. Looking for ${nounPhrase(target, 1)}.`, { urgent: true });
+      else {
+        say('Finder mode. Choose what to find.', { urgent: true });
+        setSheet('finder');
+      }
+    } else say(next === 'canvas' ? 'Canvas mode.' : 'Live mode.', { urgent: true });
   };
 
-  // Arrow keys move between the two mode radios, per the ARIA radio group pattern.
+  /** Live -> Canvas -> Finder -> Live (earbud double press, M key). */
+  const cycleMode = (step = 1) => {
+    const i = MODE_IDS.indexOf(mode);
+    const next = MODE_IDS[(i + step + MODE_IDS.length) % MODE_IDS.length];
+    switchMode(next);
+    return next;
+  };
+
+  // Arrow keys move between the mode radios, per the ARIA radio group pattern.
   const onModeKeyDown = (e) => {
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
     e.preventDefault();
-    const next = mode === 'live' ? 'canvas' : 'live';
-    switchMode(next);
+    const next = cycleMode(e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1);
     modeButtonsRef.current[next]?.focus();
   };
 
   // Shared by earbud buttons and keyboard shortcuts.
   const actions = {
-    primary: () => (mode === 'live' ? describe() : canvasControlsRef.current?.primary()),
-    pause: () => (mode === 'live' ? togglePause() : canvasControlsRef.current?.togglePlay()),
+    primary: () =>
+      mode === 'live' ? describe() : mode === 'finder' ? whereIs() : canvasControlsRef.current?.primary(),
+    pause: () => (mode === 'canvas' ? canvasControlsRef.current?.togglePlay() : togglePause()),
     // Arrow keys only step through a Canvas walkthrough; in Live there is nothing to step through.
     next: () => mode === 'canvas' && canvasControlsRef.current?.next(),
     prev: () => mode === 'canvas' && canvasControlsRef.current?.prev(),
-    // Earbud double press: describe in Live, next item in Canvas.
-    earbudNext: () => (mode === 'live' ? describe() : canvasControlsRef.current?.next()),
+    // Earbud double press: switch mode (Live -> Canvas -> Finder).
+    earbudNext: () => cycleMode(1),
+    // Earbud triple press: describe in Live, next item in Canvas, where is it in Finder.
+    earbudPrev: () =>
+      mode === 'live' ? describe() : mode === 'finder' ? whereIs() : canvasControlsRef.current?.next(),
     toggleVoice: () => setVoice(!settingsRef.current.speech),
-    toggleMode: () => switchMode(mode === 'live' ? 'canvas' : 'live'),
+    toggleMode: () => cycleMode(1),
     settings: () => setSheet('settings'),
     help: () => setSheet('help'),
   };
@@ -294,7 +357,7 @@ export default function App() {
     mediaButtons.setHandlers({
       primary: () => actionsRef.current.primary(),
       next: () => actionsRef.current.earbudNext(),
-      prev: () => actionsRef.current.prev(),
+      prev: () => actionsRef.current.earbudPrev(),
     });
   }, [live, settings.earbuds]);
 
@@ -312,7 +375,11 @@ export default function App() {
               : `Model loaded · ${detector.backend}`
           : paused
             ? 'Paused'
-            : `${stats.fps} fps · ${stats.ms} ms · ${detector.backend}`;
+            : mode === 'finder'
+              ? target
+                ? `Finding: ${spoken(target)}`
+                : 'Finder: choose an object'
+              : `${stats.fps} fps · ${stats.ms} ms · ${detector.backend}`;
 
   const iconBtn =
     'pointer-events-auto grid h-12 min-w-12 place-items-center rounded-full bg-black/60 px-3 font-semibold backdrop-blur focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none';
@@ -331,13 +398,13 @@ export default function App() {
 
       {/* Whole-screen tap target: the most reliable gesture for a blind user.
           Screen readers can still find it by touch; keyboard users have Space instead. */}
-      {live && mode === 'live' && (
+      {live && mode !== 'canvas' && (
         <button
           type="button"
           onClick={onScreenTap}
           tabIndex={-1}
           className="absolute inset-0 h-full w-full cursor-pointer focus:outline-none"
-          aria-label="Describe everything in view"
+          aria-label={mode === 'finder' ? 'Where is it?' : 'Describe everything in view'}
         />
       )}
 
@@ -381,7 +448,7 @@ export default function App() {
             role="radiogroup"
             aria-label="Mode"
             onKeyDown={onModeKeyDown}
-            className="absolute top-[calc(max(0.75rem,env(safe-area-inset-top))+3.75rem)] left-1/2 grid -translate-x-1/2 grid-cols-2 rounded-full bg-black/60 p-1 backdrop-blur"
+            className="absolute top-[calc(max(0.75rem,env(safe-area-inset-top))+3.75rem)] left-1/2 grid -translate-x-1/2 grid-cols-3 rounded-full bg-black/60 p-1 backdrop-blur"
           >
             {MODES.map(([value, label]) => (
               <button
@@ -392,7 +459,7 @@ export default function App() {
                 aria-checked={mode === value}
                 tabIndex={mode === value ? 0 : -1}
                 onClick={() => switchMode(value)}
-                className={`min-w-24 rounded-full px-5 py-2.5 font-semibold focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none ${
+                className={`min-w-20 rounded-full px-4 py-2.5 font-semibold focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none ${
                   mode === value ? 'bg-accent text-accent-ink' : 'text-white'
                 }`}
               >
@@ -438,6 +505,44 @@ export default function App() {
               </div>
             </footer>
           )}
+
+          {mode === 'finder' && (
+            <footer className="pb-safe pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pt-16">
+              <p className="min-h-[3.5rem] text-center text-xl leading-snug font-semibold text-balance drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                {caption ||
+                  (target
+                    ? `Looking for ${nounPhrase(target, 1)}. Turn slowly; tap anywhere to ask where it is.`
+                    : 'Choose what to find.')}
+              </p>
+              <div className="pointer-events-auto flex items-stretch gap-3">
+                <button
+                  type="button"
+                  onClick={togglePause}
+                  aria-pressed={paused}
+                  className="flex h-16 w-24 shrink-0 flex-col items-center justify-center rounded-2xl bg-white/15 text-sm font-semibold backdrop-blur active:bg-white/25 focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none"
+                >
+                  {paused ? <PlayIcon className="h-6 w-6" /> : <PauseIcon className="h-6 w-6" />}
+                  {paused ? 'Resume' : 'Pause'}
+                </button>
+                <button
+                  type="button"
+                  onClick={whereIs}
+                  className="h-16 flex-1 rounded-2xl bg-accent text-lg font-bold text-accent-ink active:brightness-90 focus-visible:ring-4 focus-visible:ring-white focus-visible:outline-none"
+                >
+                  {target ? 'Where is it?' : 'Choose object'}
+                </button>
+              </div>
+              {target && (
+                <button
+                  type="button"
+                  onClick={() => setSheet('finder')}
+                  className="pointer-events-auto h-12 rounded-2xl bg-white/15 font-semibold backdrop-blur active:bg-white/25 focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none"
+                >
+                  Change object ({spoken(target)})
+                </button>
+              )}
+            </footer>
+          )}
         </>
       )}
 
@@ -465,6 +570,7 @@ export default function App() {
         />
       )}
       {sheet === 'help' && <HelpSheet settings={settings} onClose={() => setSheet(null)} />}
+      {sheet === 'finder' && <FinderSheet current={target} onPick={pickTarget} onClose={() => setSheet(null)} />}
     </main>
   );
 }
