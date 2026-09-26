@@ -4,22 +4,29 @@ import '@tensorflow/tfjs-backend-webgl';
 import '@tensorflow/tfjs-backend-cpu';
 import { load } from '@tensorflow-models/coco-ssd';
 
-let pending = null;
+let backendReady = null;
+const pending = new Map(); // COCO-SSD base → Promise<{ model, backend }>
 
-async function init() {
-  let ok = false;
-  try {
-    ok = await tf.setBackend('webgl');
-  } catch {
-    ok = false;
-  }
-  if (!ok) await tf.setBackend('cpu');
-  await tf.ready();
+function initBackend() {
+  backendReady ??= (async () => {
+    let ok = false;
+    try {
+      ok = await tf.setBackend('webgl');
+    } catch {
+      ok = false;
+    }
+    if (!ok) await tf.setBackend('cpu');
+    await tf.ready();
+  })();
+  return backendReady;
+}
 
+async function init(base) {
+  await initBackend();
   const model = await load({
-    // lite_mobilenet_v2 is the smallest/fastest variant — right trade-off for phones.
-    base: 'lite_mobilenet_v2',
-    modelUrl: import.meta.env.VITE_COCO_MODEL_URL || undefined,
+    base,
+    // Self-hosted weights override only the default (Fast) model.
+    modelUrl: base === 'lite_mobilenet_v2' ? import.meta.env.VITE_COCO_MODEL_URL || undefined : undefined,
   });
 
   // Warm-up: the first inference compiles WebGL shaders (can take ~1s on mobile).
@@ -34,13 +41,14 @@ async function init() {
   return { model, backend: tf.getBackend() };
 }
 
-/** Memoised so React StrictMode / remounts never load the model twice. */
-export function createDetector() {
-  if (!pending) {
-    pending = init().catch((err) => {
-      pending = null; // allow retry
+/** Memoised per model so React StrictMode / remounts never load a model twice. */
+export function createDetector(base = 'lite_mobilenet_v2') {
+  if (!pending.has(base)) {
+    const p = init(base).catch((err) => {
+      pending.delete(base); // allow retry
       throw err;
     });
+    pending.set(base, p);
   }
-  return pending;
+  return pending.get(base);
 }

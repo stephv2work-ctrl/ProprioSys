@@ -12,6 +12,7 @@
     "test": "node --test src/lib/*.test.js"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
     "@tensorflow-models/coco-ssd": "^2.2.3",
     "@tensorflow/tfjs-backend-cpu": "^4.22.0",
     "@tensorflow/tfjs-backend-webgl": "^4.22.0",

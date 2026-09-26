@@ -24,6 +24,7 @@ export const HELP_SECTIONS = [
       'Tap anywhere, or press Capture, to take a photo.',
       'You will hear an overview, then each object from left to right using clock directions. 12 o’clock is straight ahead.',
       'Use Next and Previous, or the step slider, to move between items. With a screen reader, swipe up or down on the slider.',
+      'For distances in metres, choose Indoor distances under Distance model in Settings. It downloads about 40 megabytes once.',
       'Press New photo to take another.',
     ],
   },
@@ -48,7 +49,7 @@ export const HELP_SECTIONS = [
     items: [
       'Everything runs on your phone. No images leave your device.',
       'ProprioSys recognises 80 common kinds of objects. It cannot read text or detect walls, doors or stairs.',
-      'Distances are estimates. ProprioSys is not a replacement for a cane, guide dog or other mobility aid.',
+      'Distances are estimates, most reliable indoors within about 8 metres, and less reliable near glass, mirrors or in the dark. ProprioSys is not a replacement for a cane, guide dog or other mobility aid.',
     ],
   },
 ];

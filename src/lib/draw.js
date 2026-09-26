@@ -19,7 +19,7 @@ function fit(cw, ch, sw, sh, mode) {
   return { scale, ox: (cw - sw * scale) / 2, oy: (ch - sh * scale) / 2 };
 }
 
-function drawBox(ctx, p, t, color, dpr, { label = true, width = 3 } = {}) {
+function drawBox(ctx, p, t, color, dpr, { label = true, width = 3, text: labelText } = {}) {
   const [x, y, w, h] = p.bbox;
   const rx = t.ox + x * t.scale;
   const ry = t.oy + y * t.scale;
@@ -32,7 +32,7 @@ function drawBox(ctx, p, t, color, dpr, { label = true, width = 3 } = {}) {
   const pad = 4 * dpr;
   ctx.font = `600 ${fontPx}px system-ui, sans-serif`;
   ctx.textBaseline = 'top';
-  const text = `${p.class} ${Math.round(p.score * 100)}%`;
+  const text = labelText ?? `${p.class} ${Math.round(p.score * 100)}%`;
   const tw = ctx.measureText(text).width + pad * 2;
   const th = fontPx + pad * 2;
   const ly = ry - th < 0 ? ry : ry - th;
@@ -67,8 +67,9 @@ export function drawDetections(canvas, video, preds) {
 /**
  * Draws a captured still (letterboxed so nothing is cropped) with its detections.
  * Boxes in `highlight` (bbox array references) are emphasised and the rest dimmed.
+ * `distances` (metres, aligned with `preds`) replace the confidence in labels.
  */
-export function drawSnapshot(canvas, image, preds, highlight = []) {
+export function drawSnapshot(canvas, image, preds, highlight = [], distances = null) {
   if (!canvas || !image) return;
   const dpr = syncSize(canvas);
   const ctx = canvas.getContext('2d');
@@ -82,7 +83,9 @@ export function drawSnapshot(canvas, image, preds, highlight = []) {
   for (const p of preds) {
     if (on.size && !on.has(p.bbox)) drawBox(ctx, p, t, 'rgba(255,255,255,0.35)', dpr, { label: false, width: 2 });
   }
-  for (const p of preds) {
-    if (!on.size || on.has(p.bbox)) drawBox(ctx, p, t, '#facc15', dpr, { width: on.size ? 4 : 3 });
-  }
+  preds.forEach((p, i) => {
+    const m = distances?.[i];
+    const text = m != null ? `${p.class} ${m.toFixed(1)} m` : undefined;
+    if (!on.size || on.has(p.bbox)) drawBox(ctx, p, t, '#facc15', dpr, { width: on.size ? 4 : 3, text });
+  });
 }

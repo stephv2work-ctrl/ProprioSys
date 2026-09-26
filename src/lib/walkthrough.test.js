@@ -74,3 +74,26 @@ test('full walkthrough: overview, left-to-right tour, objects on surfaces, endin
   assert.ok(steps[2].boxes.includes(table.bbox) && steps[2].boxes.includes(cup.bbox));
   assert.equal(steps[0].boxes.length, 6);
 });
+
+test('measured distances replace size guesses and name the nearest object', () => {
+  const chair = det('chair', 20, 500, 150, 300);
+  const table = det('dining table', 300, 500, 400, 300);
+  const cup = det('cup', 600, 450, 40, 60); // on table
+  const couch = det('couch', 800, 500, 180, 200);
+  const steps = buildWalkthrough([chair, table, cup, couch], W, H, { distances: [1.24, 2.46, 2.3, 4.4] });
+  assert.deepEqual(
+    steps.map((s) => s.text),
+    [
+      "I found 4 objects: a chair, a table, a cup and a couch. Nearest is a chair, 1.2 metres away at 10 o'clock. Here they are from left to right.",
+      "At 10 o'clock, 1.2 metres: a chair.",
+      "At 12 o'clock, 2.5 metres: a table. On it: a cup.",
+      "At 2 o'clock, 4 metres: a couch.",
+      'End of walkthrough.',
+    ],
+  );
+});
+
+test('overview note is appended (e.g. depth model still downloading)', () => {
+  const steps = buildWalkthrough([det('couch', 300, 400, 400, 400)], W, H, { note: 'Distances are rough.' });
+  assert.equal(steps[0].text, 'I found 1 object: a couch. Distances are rough.');
+});

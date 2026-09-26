@@ -1,6 +1,7 @@
 import { haptics } from '../lib/haptics.js';
 import { speaker } from '../lib/speech.js';
 import { mediaButtons } from '../lib/mediaButtons.js';
+import { DEPTH_MODELS, OBJECT_MODELS } from '../lib/models.js';
 import Sheet from './Sheet.jsx';
 
 function Toggle({ label, hint, checked, onChange, disabled }) {
@@ -42,10 +43,75 @@ function Slider({ label, value, display, min, max, step, onChange }) {
   );
 }
 
-export default function SettingsSheet({ settings, onChange, onClose }) {
+function ModelPicker({ legend, name, models, value, onChange }) {
+  return (
+    <fieldset className="py-3">
+      <legend className="text-lg font-medium">{legend}</legend>
+      <div className="mt-2 space-y-2">
+        {models.map((m) => (
+          <label
+            key={m.id}
+            className="flex cursor-pointer items-start gap-3 rounded-xl bg-white/10 p-3 has-[:checked]:bg-accent has-[:checked]:text-accent-ink has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-accent/50"
+          >
+            <input
+              type="radio"
+              name={name}
+              value={m.id}
+              checked={value === m.id}
+              onChange={() => onChange(m.id)}
+              className="mt-1 h-5 w-5 shrink-0 accent-[var(--color-accent-ink)]"
+            />
+            <span>
+              <span className="block font-semibold">{m.label}</span>
+              <span className="block text-sm opacity-80">{m.detail}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function depthStatusText(depth) {
+  if (depth.status === 'loading') return `Downloading… ${depth.progress}%`;
+  if (depth.status === 'error') return depth.error;
+  if (depth.status !== 'ready') return null;
+  return depth.device === 'webgpu'
+    ? 'Ready. Used in Canvas mode; measuring takes about a second.'
+    : 'Ready, but this phone lacks WebGPU, so measuring can take up to 30 seconds per photo.';
+}
+
+export default function SettingsSheet({ settings, onChange, depth, onClose }) {
+  const depthStatus = depthStatusText(depth);
   return (
     <Sheet title="Settings" onClose={onClose}>
       <div className="mt-2 divide-y divide-white/10">
+        <ModelPicker
+          legend="Object model"
+          name="objectModel"
+          models={OBJECT_MODELS}
+          value={settings.objectModel}
+          onChange={(id) => onChange({ objectModel: id })}
+        />
+        <div className="py-3">
+          <ModelPicker
+            legend="Distance model (Canvas mode)"
+            name="depthModel"
+            models={DEPTH_MODELS}
+            value={settings.depthModel}
+            onChange={(id) => onChange({ depthModel: id })}
+          />
+          {depthStatus && (
+            <p className="flex items-center justify-between gap-3 text-sm text-white/75">
+              <span>{depthStatus}</span>
+              {depth.status === 'error' && (
+                <button type="button" onClick={depth.retry} className="min-h-10 rounded-full bg-white/15 px-4 font-semibold">
+                  Retry
+                </button>
+              )}
+            </p>
+          )}
+        </div>
         <Toggle
           label="ProprioSys voice"
           hint={
