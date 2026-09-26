@@ -1,0 +1,57 @@
+const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
+
+// COCO labels are English, so always prefer an English voice (the user's
+// regional English if available), and an on-device one for low latency.
+let voice = null;
+function pickVoice() {
+  const voices = synth.getVoices();
+  const pref = (navigator.language || 'en-US').toLowerCase();
+  const en = voices.filter((v) => v.lang?.toLowerCase().startsWith('en'));
+  voice =
+    en.find((v) => v.lang.toLowerCase() === pref && v.localService) ||
+    en.find((v) => v.lang.toLowerCase() === pref) ||
+    en.find((v) => v.localService) ||
+    en[0] ||
+    null;
+}
+if (synth) {
+  pickVoice();
+  synth.addEventListener?.('voiceschanged', pickVoice);
+}
+
+let startedAt = 0;
+const STUCK_MS = 7000; // Safari occasionally leaves `speaking` stuck true
+
+export const speaker = {
+  supported: Boolean(synth),
+
+  /** iOS only allows speech after a user gesture — call from the Start tap. */
+  unlock() {
+    if (!synth) return;
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    synth.speak(u);
+  },
+
+  /** Returns true if the utterance was queued; non-urgent speech never interrupts. */
+  say(text, { urgent = false, rate = 1 } = {}) {
+    if (!synth) return false;
+    const busy = synth.speaking || synth.pending;
+    if (busy) {
+      const stuck = performance.now() - startedAt > STUCK_MS;
+      if (!urgent && !stuck) return false;
+      synth.cancel();
+    }
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice;
+    u.lang = voice?.lang || 'en-US';
+    u.rate = rate;
+    startedAt = performance.now();
+    synth.speak(u);
+    return true;
+  },
+
+  cancel() {
+    synth?.cancel();
+  },
+};
