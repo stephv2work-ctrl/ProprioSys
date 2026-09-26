@@ -34,7 +34,8 @@ with HTTPS (Netlify, Vercel, Cloudflare Pages, GitHub Pages).
 | --- | --- |
 | `src/lib/models.js` | The selectable models (object + depth): labels, sizes, repos, input constraints |
 | `src/lib/detector.js` | Lazy-loaded TF.js chunk: WebGL backend (CPU fallback), chosen COCO-SSD variant, shader warm-up, memoised per model |
-| `src/lib/depth.js` | Lazy-loaded Transformers.js depth runtime: WebGPU (WASM fallback), download progress, warm-up, session reset on failure |
+| `src/lib/depth.js` | Main-thread client for the depth worker: load, progress, run, unload |
+| `src/lib/depth.worker.js` | Transformers.js + ONNX Runtime in a Web Worker: WebGPU or WASM, pinned model, warm-up |
 | `src/lib/distance.js` | Pure helpers: model input sizing, per-object distance from a depth map, spoken distance formatting |
 | `src/hooks/useDetectionLoop.js` | rAF loop, ≤15 fps, never overlaps inferences, no React re-render per frame |
 | `src/lib/announcer.js` | Pure logic: groups detections, 2-frame debounce, per-object cooldowns, urgent "very close" escalation |
@@ -72,8 +73,10 @@ Settings → **Object model** (Fast / Balanced / Accurate) and **Distance model*
 - Transformers.js caches weights in Cache Storage. The ONNX Runtime WASM (27 MB) is served from
   our own `/assets`, not a CDN, and cached by the service worker. The model is pinned to a Hugging
   Face commit (`revision` in `models.js`); review a new commit before bumping it.
-- On phones without WebGPU, inference runs in a worker (`wasm.proxy`) so the page never freezes.
-- Switching models unloads the previous one; turning depth off frees its memory.
+- All depth inference runs in our own Web Worker (`src/lib/depth.worker.js`), on WebGPU or the WASM
+  fallback, so even a 15 s CPU measurement never freezes the page. Testers can force the WASM path
+  with `localStorage.setItem('propriosys.debug.forceWasm', '1')`.
+- Switching models unloads the previous one; turning depth off terminates the worker and frees its memory.
 
 ## Safety and privacy
 

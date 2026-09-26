@@ -16,9 +16,8 @@ export function useDepthModel(id) {
     setState({ status: 'loading', progress: 0, device: null, error: null });
     import('../lib/depth.js')
       .then(async (m) => {
-        const { device } = await m.detectBackend();
-        if (!cancelled) setState((s) => ({ ...s, device }));
-        await m.loadDepthModel(id, (progress) => !cancelled && setState((s) => ({ ...s, progress })));
+        // The worker reports which backend it actually got (WebGPU or WASM).
+        const { device } = await m.loadDepthModel(id, (progress) => !cancelled && setState((s) => ({ ...s, progress })));
         if (!cancelled) setState({ status: 'ready', progress: 100, device, error: null });
       })
       .catch((err) => {
