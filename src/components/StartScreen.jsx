@@ -19,10 +19,10 @@ export default function StartScreen({ onStart, starting, cameraError, detectorSt
             <EyeIcon className="h-11 w-11" />
           </div>
           <h1 id="app-title" className="text-4xl font-extrabold tracking-tight">
-            SightLine
+            ProprioSys
           </h1>
           <p className="text-lg text-white/80">
-            Point your phone ahead. SightLine speaks the objects it sees, where they are, and vibrates when something is
+            Point your phone ahead. ProprioSys speaks the objects it sees, where they are, and vibrates when something is
             very close.
           </p>
         </div>

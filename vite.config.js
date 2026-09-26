@@ -15,8 +15,8 @@ export default defineConfig(({ mode }) => ({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'SightLine — Object Narrator',
-        short_name: 'SightLine',
+        name: 'ProprioSys — Object Narrator',
+        short_name: 'ProprioSys',
         description:
           'Points your camera at the world and speaks what it sees, with haptic cues for nearby objects.',
         theme_color: '#000000',

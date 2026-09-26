@@ -1,4 +1,4 @@
-# SightLine
+# ProprioSys
 
 Mobile PWA that streams the rear camera, runs COCO-SSD (TensorFlow.js, WebGL) on-device, and
 speaks what it sees — with direction ("on your left"), rough distance ("close", "very close"), and
