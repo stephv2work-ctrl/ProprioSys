@@ -26,6 +26,23 @@ export default defineConfig(({ mode }) => ({
         start_url: '/',
         scope: '/',
         categories: ['accessibility', 'utilities'],
+        // Long-press the home-screen icon to jump straight into a mode.
+        shortcuts: [
+          {
+            name: 'Live mode',
+            short_name: 'Live',
+            description: 'Continuous object announcements',
+            url: '/?mode=live',
+            icons: [{ src: 'pwa-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Canvas mode',
+            short_name: 'Canvas',
+            description: 'Take a photo and hear a walkthrough',
+            url: '/?mode=canvas',
+            icons: [{ src: 'pwa-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+        ],
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },

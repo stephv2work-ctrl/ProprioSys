@@ -9,6 +9,9 @@ export const DEFAULTS = {
   rate: 1.1,
   minScore: 0.55,
   verbosity: 'normal',
+  earbuds: true, // earbud play/pause button controls the app
+  voiceChosen: false, // first-run question: ProprioSys voice vs. screen reader
+  tutorialDone: false,
 };
 
 function read() {
