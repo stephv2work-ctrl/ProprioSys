@@ -92,6 +92,8 @@ export default defineConfig(({ mode }) => ({
     }),
   ].filter(Boolean),
   preview: { headers: securityHeaders },
+  // The depth worker lazy-loads chunks, which needs ES-module workers.
+  worker: { format: 'es' },
   build: {
     target: 'es2020',
     // detector chunk is TF.js itself, lazy-loaded and precached — size is expected.
