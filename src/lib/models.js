@@ -32,8 +32,9 @@ export const DEPTH_MODELS = [
   {
     id: 'dpt-nyu',
     label: 'Indoor distances',
-    detail: 'DPT-DINOv2 (NYU) · about 40 MB · distances in metres, most reliable indoors up to about 8 m',
+    detail: 'DPT-DINOv2 (NYU) · about 70 MB download (40 MB model + 27 MB runtime) · distances in metres, most reliable indoors up to about 8 m',
     repo: 'onnx-community/dpt-dinov2-small-nyu', // Apache-2.0
+    revision: '9cc28480d05587990dbdf9c7fb5636d0f8a683cd', // pinned; review before bumping
     // q4f16 needs WebGPU with shader-f16; q8 runs everywhere else.
     dtype: { gpuF16: 'q4f16', fallback: 'q8' },
     // DPT halves its patch grid internally, so both sides must be multiples of 2 × 14 px.

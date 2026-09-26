@@ -3,6 +3,16 @@
 // those buttons to a page that is playing media, so we loop a silent clip.
 
 let audio = null;
+let active = false;
+
+// The silent loop exists only so earbud buttons reach the page. While the app
+// is hidden nothing can respond to them anyway, so stop playback: it would
+// otherwise drain battery, keep the tab alive and hold the audio focus.
+function onVisibility() {
+  if (!audio || !active) return;
+  if (document.hidden) audio.pause();
+  else audio.play().catch(() => {});
+}
 
 // 6 s of 8 kHz 8-bit silence (~48 kB), built at runtime. Android only shows
 // media controls for clips of at least ~5 s.
@@ -39,7 +49,9 @@ export const mediaButtons = {
     if (!audio) {
       audio = new Audio(silentWavUrl());
       audio.loop = true;
+      document.addEventListener('visibilitychange', onVisibility);
     }
+    active = true;
     try {
       await audio.play();
     } catch {
@@ -59,7 +71,7 @@ export const mediaButtons = {
     if (!this.supported) return;
     const ms = navigator.mediaSession;
     const keepAlive = () => {
-      if (audio?.paused) audio.play().catch(() => {});
+      if (active && audio?.paused && !document.hidden) audio.play().catch(() => {});
       ms.playbackState = 'playing';
     };
     const wrap = (fn) => (fn ? () => (keepAlive(), fn()) : null);
@@ -74,6 +86,7 @@ export const mediaButtons = {
   },
 
   stop() {
+    active = false;
     audio?.pause();
     if (!this.supported) return;
     for (const action of ACTIONS) {

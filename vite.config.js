@@ -3,6 +3,14 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'node:fs';
+
+// Serve the production security headers from `vite preview` too, so CSP
+// problems show up locally. vercel.json stays the single source of truth.
+const vercel = JSON.parse(readFileSync(new URL('./vercel.json', import.meta.url), 'utf8'));
+const securityHeaders = Object.fromEntries(
+  vercel.headers.find((h) => h.source === '/(.*)').headers.map(({ key, value }) => [key, value]),
+);
 
 // `npm run dev:mobile` uses --mode https: getUserMedia requires a secure
 // context, so testing on a phone over the LAN needs a (self-signed) cert.
@@ -56,7 +64,7 @@ export default defineConfig(({ mode }) => ({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         runtimeCaching: [
           {
-            // COCO-SSD weights (~5 MB) — cache on first load so the app works offline after.
+            // COCO-SSD weights (18–67 MB) — cache on first load so the app works offline after.
             urlPattern: ({ url }) =>
               url.origin === 'https://storage.googleapis.com' &&
               url.pathname.startsWith('/tfjs-models/'),
@@ -64,25 +72,26 @@ export default defineConfig(({ mode }) => ({
             options: {
               cacheName: 'tfjs-models',
               expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 180 },
-              cacheableResponse: { statuses: [0, 200] },
+              // Only real successes: an opaque (status 0) error must never be cached for months.
+              cacheableResponse: { statuses: [200] },
             },
           },
           {
-            // ONNX Runtime WebAssembly used by the depth model (Transformers.js loads it from
-            // jsDelivr). Depth weights themselves are cached by Transformers.js in Cache Storage.
-            urlPattern: ({ url }) =>
-              url.origin === 'https://cdn.jsdelivr.net' && url.pathname.startsWith('/npm/onnxruntime-web@'),
+            // ONNX Runtime WebAssembly for the depth model, served from our own /assets
+            // (too big to precache for everyone). Depth weights are cached by Transformers.js.
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.endsWith('.wasm'),
             handler: 'CacheFirst',
             options: {
               cacheName: 'onnxruntime',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 180 },
-              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 180 },
+              cacheableResponse: { statuses: [200] },
             },
           },
         ],
       },
     }),
   ].filter(Boolean),
+  preview: { headers: securityHeaders },
   build: {
     target: 'es2020',
     // detector chunk is TF.js itself, lazy-loaded and precached — size is expected.

@@ -81,7 +81,7 @@ function depthStatusText(depth) {
     : 'Ready, but this phone lacks WebGPU, so measuring can take up to 30 seconds per photo.';
 }
 
-export default function SettingsSheet({ settings, onChange, depth, onClose }) {
+export default function SettingsSheet({ settings, onChange, onVoiceChange, depth, onClose }) {
   const depthStatus = depthStatusText(depth);
   return (
     <Sheet title="Settings" onClose={onClose}>
@@ -121,7 +121,7 @@ export default function SettingsSheet({ settings, onChange, depth, onClose }) {
           }
           checked={settings.speech && speaker.supported}
           disabled={!speaker.supported}
-          onChange={(v) => onChange({ speech: v })}
+          onChange={onVoiceChange}
         />
         <Toggle
           label="Haptic feedback"

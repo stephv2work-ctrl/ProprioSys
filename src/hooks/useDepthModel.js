@@ -33,6 +33,8 @@ export function useDepthModel(id) {
       });
     return () => {
       cancelled = true;
+      // Free the model when it's switched off or replaced.
+      import('../lib/depth.js').then((m) => m.unloadDepthModel(id));
     };
   }, [id, attempt]);
 
