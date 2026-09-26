@@ -4,6 +4,15 @@ Mobile PWA that streams the rear camera, runs COCO-SSD (TensorFlow.js, WebGL) on
 speaks what it sees — with direction ("on your left"), rough distance ("close", "very close"), and
 haptic pulses for nearby objects. No frames leave the device.
 
+## Modes
+
+- **Live** — continuous scanning; announces new or moved objects with direction and rough distance.
+- **Canvas** — tap to take a still, then hear a guided walkthrough: an overview ("I found 5 objects…"),
+  a left-to-right tour using clock directions ("At 10 o'clock, close: a chair"), objects grouped
+  with the surface they sit on ("On it: a laptop and a cup"), and a closing line. The item being
+  described is highlighted on screen. Swipe left/right (or Previous/Next) to move between items,
+  tap to pause/play. Everything runs on-device — no paid APIs.
+
 ## Run
 
 ```bash
@@ -27,7 +36,9 @@ with HTTPS (Netlify, Vercel, Cloudflare Pages, GitHub Pages).
 | `src/lib/announcer.js` | Pure logic: groups detections, 2-frame debounce, per-object cooldowns, urgent "very close" escalation |
 | `src/lib/speech.js` | Web Speech wrapper: English voice, non-urgent speech never interrupts, iOS unlock, stuck-state recovery |
 | `src/lib/haptics.js` | Throttled Vibration API (no-op on iOS) |
-| `src/lib/draw.js` | Canvas overlay matched to the video's `object-fit: cover` |
+| `src/lib/draw.js` | Live overlay (matches the video's `object-fit: cover`) and Canvas snapshot rendering with highlighted boxes |
+| `src/lib/walkthrough.js` | Pure logic for Canvas mode: overview, clock-direction tour, "on the table" grouping |
+| `src/components/CanvasMode.jsx` | Capture → analyse → narrated walkthrough with swipe/tap controls |
 | `src/hooks/useCamera.js` / `useWakeLock.js` | 640×480 rear camera with friendly errors; screen kept awake while running |
 
 Plans from the announcer are only `commit()`ed when speech actually played, so anything dropped
