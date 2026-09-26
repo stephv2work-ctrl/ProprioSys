@@ -12,6 +12,8 @@ export const DEFAULTS = {
   earbuds: true, // earbud play/pause button controls the app
   voiceChosen: false, // first-run question: ProprioSys voice vs. screen reader
   tutorialDone: false,
+  objectModel: 'fast', // see lib/models.js
+  depthModel: 'off',
 };
 
 function read() {

@@ -2,6 +2,7 @@
 // an overview, then a left-to-right sweep using clock directions, grouping
 // small objects with the surface they rest on. Pure logic (no DOM).
 import { plural } from './announcer.js';
+import { formatDistance } from './distance.js';
 
 const SPOKEN = {
   'dining table': 'table',
@@ -65,10 +66,12 @@ function countPhrases(objs) {
 }
 
 /**
+ * @param {{ distances?: (number|null)[], note?: string }} [opts] `distances` (metres) align
+ *   with `preds`; when given they replace the box-size guesses. `note` is appended to the overview.
  * @returns {{ text: string, boxes: number[][] }[]} steps — `boxes` holds the
  *   original `bbox` arrays (by reference) so the UI can highlight them.
  */
-export function buildWalkthrough(preds, w, h) {
+export function buildWalkthrough(preds, w, h, { distances, note } = {}) {
   if (!w || !h || preds.length === 0) {
     return [
       {
@@ -78,10 +81,12 @@ export function buildWalkthrough(preds, w, h) {
     ];
   }
 
-  const objs = preds.map((p) => {
+  const objs = preds.map((p, i) => {
     const [x, y, bw, bh] = p.bbox;
-    return { label: p.class, bbox: p.bbox, cx: (x + bw / 2) / w, area: (bw * bh) / (w * h), parent: null };
+    const metres = distances?.[i] ?? null;
+    return { label: p.class, bbox: p.bbox, cx: (x + bw / 2) / w, area: (bw * bh) / (w * h), metres, parent: null };
   });
+  const measured = objs.some((o) => o.metres != null);
 
   // Attach each object to the largest surface it sits on.
   for (const o of objs) {
@@ -111,19 +116,23 @@ export function buildWalkthrough(preds, w, h) {
   const tour = [...groups.values()].sort((a, b) => mean(a) - mean(b));
 
   const ordered = tour.flatMap((g) => [...g.members, ...g.children]);
-  const steps = [
-    {
-      text:
-        objs.length === 1
-          ? `I found 1 object: ${joinList(countPhrases(ordered))}.`
-          : `I found ${objs.length} objects: ${joinList(countPhrases(ordered))}. Here they are from left to right.`,
-      boxes: objs.map((o) => o.bbox),
-    },
-  ];
+  let overview =
+    objs.length === 1
+      ? `I found 1 object: ${joinList(countPhrases(ordered))}.`
+      : `I found ${objs.length} objects: ${joinList(countPhrases(ordered))}.`;
+  if (measured && objs.length > 1) {
+    const nearest = objs.filter((o) => o.metres != null).reduce((a, b) => (b.metres < a.metres ? b : a));
+    overview += ` Nearest is ${nounPhrase(nearest.label, 1)}, ${formatDistance(nearest.metres)} away at ${clockOf(nearest.cx)} o'clock.`;
+  }
+  if (objs.length > 1) overview += ' Here they are from left to right.';
+  if (note) overview += ` ${note}`;
+  const steps = [{ text: overview, boxes: objs.map((o) => o.bbox) }];
 
   for (const g of tour) {
     const largest = g.members.reduce((a, b) => (b.area > a.area ? b : a));
-    const dist = distanceOf(largest.area);
+    // Measured distance to the nearest member when available, else a size-based guess.
+    const known = g.members.map((o) => o.metres).filter((m) => m != null);
+    const dist = known.length ? formatDistance(Math.min(...known)) : distanceOf(largest.area);
     let text = `At ${g.clock} o'clock${dist ? `, ${dist}` : ''}: ${nounPhrase(g.label, g.members.length)}.`;
     if (g.children.length) {
       text += ` On ${g.members.length > 1 ? 'them' : 'it'}: ${joinList(countPhrases(g.children))}.`;

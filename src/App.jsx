@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCamera } from './hooks/useCamera.js';
 import { useDetector } from './hooks/useDetector.js';
+import { useDepthModel } from './hooks/useDepthModel.js';
+import { getObjectModel } from './lib/models.js';
 import { useDetectionLoop } from './hooks/useDetectionLoop.js';
 import { useWakeLock } from './hooks/useWakeLock.js';
 import { useSettings } from './hooks/useSettings.js';
@@ -47,7 +49,8 @@ export default function App() {
   }, [settings]);
 
   const camera = useCamera(videoRef);
-  const detector = useDetector();
+  const detector = useDetector(getObjectModel(settings.objectModel).base);
+  const depth = useDepthModel(settings.depthModel);
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [sheet, setSheet] = useState(null); // null | 'settings' | 'help'
@@ -135,6 +138,16 @@ export default function App() {
     else if (detector.status === 'ready' && prev && prev !== 'ready') say('Vision model ready.');
     else if (detector.status === 'error' && prev !== 'error') say(detector.error, { urgent: true });
   }, [live, detector.status, detector.error, say]);
+
+  // Announce once when a chosen distance model finishes downloading (or fails).
+  const depthSaidRef = useRef(depth.status);
+  useEffect(() => {
+    const prev = depthSaidRef.current;
+    depthSaidRef.current = depth.status;
+    if (prev !== 'loading') return;
+    if (depth.status === 'ready') say('Distance model ready.');
+    else if (depth.status === 'error') say(depth.error, { urgent: true });
+  }, [depth.status, depth.error, say]);
 
   // First-run tutorial, once the camera is live.
   useEffect(() => {
@@ -232,7 +245,11 @@ export default function App() {
       : detector.status === 'error'
         ? 'Model error'
         : mode === 'canvas'
-          ? `Model loaded · ${detector.backend}`
+          ? depth.status === 'loading'
+            ? `Depth model ${depth.progress}%`
+            : depth.status === 'ready'
+              ? 'Model loaded · depth on'
+              : `Model loaded · ${detector.backend}`
           : paused
             ? 'Paused'
             : `${stats.fps} fps · ${stats.ms} ms · ${detector.backend}`;
@@ -265,7 +282,13 @@ export default function App() {
       )}
 
       {live && mode === 'canvas' && (
-        <CanvasMode videoRef={videoRef} model={detector.model} settings={settings} controlsRef={canvasControlsRef} />
+        <CanvasMode
+          videoRef={videoRef}
+          model={detector.model}
+          settings={settings}
+          controlsRef={canvasControlsRef}
+          depth={depth}
+        />
       )}
 
       {live && (
@@ -372,7 +395,7 @@ export default function App() {
       )}
 
       {sheet === 'settings' && (
-        <SettingsSheet settings={settings} onChange={updateSettings} onClose={() => setSheet(null)} />
+        <SettingsSheet settings={settings} onChange={updateSettings} depth={depth} onClose={() => setSheet(null)} />
       )}
       {sheet === 'help' && <HelpSheet settings={settings} onClose={() => setSheet(null)} />}
     </main>

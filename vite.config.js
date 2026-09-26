@@ -67,6 +67,18 @@ export default defineConfig(({ mode }) => ({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          {
+            // ONNX Runtime WebAssembly used by the depth model (Transformers.js loads it from
+            // jsDelivr). Depth weights themselves are cached by Transformers.js in Cache Storage.
+            urlPattern: ({ url }) =>
+              url.origin === 'https://cdn.jsdelivr.net' && url.pathname.startsWith('/npm/onnxruntime-web@'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'onnxruntime',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 180 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
     }),

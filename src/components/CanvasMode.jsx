@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildWalkthrough } from '../lib/walkthrough.js';
+import { boxDistance } from '../lib/distance.js';
 import { drawSnapshot } from '../lib/draw.js';
 import { speaker } from '../lib/speech.js';
 import { haptics } from '../lib/haptics.js';
@@ -19,7 +20,7 @@ function captureFrame(video) {
 const SWIPE_PX = 50;
 const TAP_PX = 15;
 
-export default function CanvasMode({ videoRef, model, settings, controlsRef }) {
+export default function CanvasMode({ videoRef, model, settings, controlsRef, depth }) {
   const viewRef = useRef(null);
   const snapRef = useRef(null);
   const seqRef = useRef(null);
@@ -31,6 +32,8 @@ export default function CanvasMode({ videoRef, model, settings, controlsRef }) {
 
   const [phase, setPhase] = useState('ready'); // ready | analyzing | walkthrough
   const [preds, setPreds] = useState([]);
+  const [distances, setDistances] = useState(null);
+  const [busyText, setBusyText] = useState('Analysing photo…');
   const [steps, setSteps] = useState([]);
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -78,12 +81,12 @@ export default function CanvasMode({ videoRef, model, settings, controlsRef }) {
   useEffect(() => {
     if (phase === 'ready') return;
     const canvas = viewRef.current;
-    const draw = () => drawSnapshot(canvas, snapRef.current, preds, steps[step]?.boxes ?? []);
+    const draw = () => drawSnapshot(canvas, snapRef.current, preds, steps[step]?.boxes ?? [], distances);
     draw();
     const ro = new ResizeObserver(draw);
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [phase, preds, steps, step]);
+  }, [phase, preds, steps, step, distances]);
 
   const capture = async () => {
     const video = videoRef.current;
@@ -94,14 +97,40 @@ export default function CanvasMode({ videoRef, model, settings, controlsRef }) {
 
     snapRef.current = captureFrame(video);
     setPreds([]);
+    setDistances(null);
     setSteps([]);
+    setBusyText('Analysing photo…');
     setPhase('analyzing');
     try {
       const snap = snapRef.current;
       // A still can afford more boxes and a lower threshold than the live loop.
       const result = await model.detect(snap, 30, Math.max(0.3, settings.minScore - 0.15));
-      const list = buildWalkthrough(result, snap.width, snap.height);
+
+      let metres = null;
+      let note;
+      if (depth.status === 'ready' && result.length) {
+        setBusyText('Measuring distances…');
+        // Without WebGPU this can take many seconds; tell non-visual users why it's quiet.
+        if (depth.device !== 'webgpu') {
+          const msg = 'Measuring distances. This can take up to 30 seconds on this phone.';
+          if (settings.speech) speaker.say(msg, { urgent: true, rate: settings.rate });
+          else srAnnounce(msg);
+        }
+        try {
+          const { estimateDepth } = await import('../lib/depth.js');
+          const map = await estimateDepth(depth.id, snap);
+          metres = result.map((p) => boxDistance(map, p.bbox, snap.width, snap.height));
+        } catch (err) {
+          console.error(err);
+          note = 'Distance measurement failed, so distances are rough.';
+        }
+      } else if (depth.status === 'loading' && result.length) {
+        note = 'The depth model is still downloading, so distances are rough.';
+      }
+
+      const list = buildWalkthrough(result, snap.width, snap.height, { distances: metres, note });
       setPreds(result);
+      setDistances(metres);
       setSteps(list);
       setPhase('walkthrough');
       playFrom(0, list);
@@ -216,9 +245,7 @@ export default function CanvasMode({ videoRef, model, settings, controlsRef }) {
       />
       <footer className="pb-safe pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-3 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 pt-16">
         {phase === 'analyzing' ? (
-          <p role="status" className="text-center text-xl font-semibold">
-            Analysing photo…
-          </p>
+          <p className="text-center text-xl font-semibold">{busyText}</p>
         ) : (
           <>
             {steps.length > 1 && (

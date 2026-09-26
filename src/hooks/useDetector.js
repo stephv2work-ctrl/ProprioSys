@@ -3,14 +3,15 @@ import { useCallback, useEffect, useState } from 'react';
 const INITIAL = { status: 'loading', model: null, backend: null, error: null };
 
 /** Starts loading TF.js + COCO-SSD on mount so it's ready by the time the user taps Start. */
-export function useDetector() {
+export function useDetector(base) {
   const [state, setState] = useState(INITIAL);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setState(INITIAL);
     import('../lib/detector.js')
-      .then((m) => m.createDetector())
+      .then((m) => m.createDetector(base))
       .then(({ model, backend }) => {
         if (!cancelled) setState({ status: 'ready', model, backend, error: null });
       })
@@ -29,12 +30,9 @@ export function useDetector() {
     return () => {
       cancelled = true;
     };
-  }, [attempt]);
+  }, [base, attempt]);
 
-  const retry = useCallback(() => {
-    setState(INITIAL);
-    setAttempt((n) => n + 1);
-  }, []);
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   return { ...state, retry };
 }
