@@ -47,6 +47,7 @@ export default function App() {
   useEffect(() => {
     settingsRef.current = settings;
     announcerRef.current.configure(VERBOSITY[settings.verbosity] ?? VERBOSITY.normal);
+    speaker.configure({ rate: settings.rate, volume: settings.volume });
     if (!settings.showBoxes) clearCanvas(canvasRef.current);
   }, [settings]);
 
@@ -162,7 +163,7 @@ export default function App() {
       window.location.reload();
       return;
     }
-    say('An update is ready. It will install the next time you open the app.');
+    say('Update ready for next time.');
     const onHide = () => document.hidden && window.location.reload();
     document.addEventListener('visibilitychange', onHide);
     return () => document.removeEventListener('visibilitychange', onHide);
@@ -200,7 +201,7 @@ export default function App() {
     camera.setEnabled(!next);
     speaker.cancel();
     setCaption(next ? 'Paused. Camera off.' : '');
-    say(next ? 'Paused. Camera off.' : 'Resumed', { urgent: true });
+    say(next ? 'Paused.' : 'Resumed.', { urgent: true });
   };
 
   /** Switching the voice off can leave a user without a screen reader in silence, so say how to undo it first. */
@@ -255,7 +256,7 @@ export default function App() {
       camera.setEnabled(true);
     }
     setMode(next);
-    say(next === 'canvas' ? 'Canvas mode. Tap Capture to take a photo.' : 'Live mode.', { urgent: true });
+    say(next === 'canvas' ? 'Canvas mode.' : 'Live mode.', { urgent: true });
   };
 
   // Arrow keys move between the two mode radios, per the ARIA radio group pattern.

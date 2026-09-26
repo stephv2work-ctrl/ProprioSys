@@ -35,3 +35,10 @@ test('unknown model ids, wrong types and out-of-range numbers are rejected', () 
   assert.equal(s.verbosity, 'normal');
   assert.equal('extra' in s, false);
 });
+
+test('voice volume is kept within 20–100%', () => {
+  assert.equal(normalizeSettings({}).volume, 0.7);
+  assert.equal(normalizeSettings({ volume: 0.5 }).volume, 0.5);
+  assert.equal(normalizeSettings({ volume: 0 }).volume, 0.2);
+  assert.equal(normalizeSettings({ volume: 3 }).volume, 1);
+});

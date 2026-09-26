@@ -18,10 +18,16 @@ const PLURALS = {
 
 export const plural = (label) => PLURALS[label] ?? `${label}s`;
 
+// How chatty Live mode is. "Very close" warnings ignore all of these limits.
+//   repeatMs   re-announce an unchanged object after this long (Infinity = never)
+//   changeMs   minimum time before announcing that an object moved or changed
+//   minGapMs   minimum silence between any two announcements
+//   maxItems   objects per sentence
+//   minArea    ignore objects smaller than this fraction of the frame (small and far away)
 export const VERBOSITY = {
-  low: { repeatMs: 20000, changeMs: 5000 },
-  normal: { repeatMs: 10000, changeMs: 3000 },
-  high: { repeatMs: 6000, changeMs: 1500 },
+  low: { repeatMs: Infinity, changeMs: 8000, minGapMs: 5000, maxItems: 1, minArea: 0.05 },
+  normal: { repeatMs: 45000, changeMs: 5000, minGapMs: 3000, maxItems: 2, minArea: 0.02 },
+  high: { repeatMs: 15000, changeMs: 2000, minGapMs: 1500, maxItems: 3, minArea: 0 },
 };
 
 // Rear camera is not mirrored, so image-left is the user's left.
@@ -80,11 +86,12 @@ export class Announcer {
       minHits: 2, // consecutive frames before an object counts (kills 1-frame flicker)
       gapMs: 700, // a gap longer than this resets the hit streak
       forgetMs: 2500, // after this long unseen, a returning object is "new" again
-      maxItems: 3, // keep sentences short enough to be useful while walking
+      stableFrames: 4, // a change must hold this many frames (kills left/ahead flicker)
       ...VERBOSITY.normal,
       ...opts,
     };
     this.tracks = new Map();
+    this.lastSpokeAt = -Infinity;
   }
 
   configure(opts) {
@@ -93,6 +100,7 @@ export class Announcer {
 
   reset() {
     this.tracks.clear();
+    this.lastSpokeAt = -Infinity;
   }
 
   /**
@@ -101,15 +109,16 @@ export class Announcer {
    */
   evaluate(preds, w, h, now) {
     if (!w || !h) return null;
-    const { minHits, gapMs, forgetMs, maxItems, repeatMs, changeMs } = this.opts;
-    const items = summarize(preds, w, h);
+    const { minHits, gapMs, forgetMs, maxItems, repeatMs, changeMs, minGapMs, minArea, stableFrames } = this.opts;
+    // Small, distant objects are mostly noise while moving around; skip them.
+    const items = summarize(preds, w, h).filter((it) => it.prox || it.area >= minArea);
     const present = new Set();
 
     for (const it of items) {
       present.add(it.label);
       let t = this.tracks.get(it.label);
       if (!t) {
-        t = { hits: 0, lastSeen: -Infinity, announced: null };
+        t = { hits: 0, lastSeen: -Infinity, announced: null, pending: null };
         this.tracks.set(it.label, t);
       }
       t.hits = now - t.lastSeen > gapMs ? 1 : t.hits + 1;
@@ -133,7 +142,13 @@ export class Announcer {
         continue;
       }
       const age = now - a.at;
-      const changed = a.region !== it.region || a.prox !== it.prox || a.count !== it.count;
+      // Only count a change once the new state has held for a few frames.
+      const state = `${it.region}|${it.prox}|${it.count}`;
+      const differs = a.region !== it.region || a.prox !== it.prox || a.count !== it.count;
+      if (!differs) t.pending = null;
+      else if (t.pending?.state === state) t.pending.frames++;
+      else t.pending = { state, frames: 1 };
+      const changed = differs && t.pending.frames >= stableFrames;
       if (it.prox === 'very close' && a.prox !== 'very close' && age > 1000) {
         due.push(it);
         urgent = true;
@@ -142,6 +157,8 @@ export class Announcer {
       }
     }
     if (due.length === 0) return null;
+    // Leave room to breathe between announcements, unless something is very close.
+    if (!urgent && now - this.lastSpokeAt < minGapMs) return null;
 
     const picked = due.slice(0, maxItems);
     return {
@@ -153,6 +170,7 @@ export class Announcer {
   }
 
   commit(plan, now) {
+    this.lastSpokeAt = now;
     for (const it of plan.items) {
       const t = this.tracks.get(it.label);
       if (t) t.announced = { at: now, region: it.region, prox: it.prox, count: it.count };
