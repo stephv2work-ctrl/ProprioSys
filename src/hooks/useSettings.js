@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-const KEY = 'sightline.settings.v1';
+const KEY = 'propriosys.settings.v1';
 
 export const DEFAULTS = {
   speech: true,
