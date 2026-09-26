@@ -1,24 +1,13 @@
 import { useCallback, useState } from 'react';
+import { DEFAULTS, normalizeSettings } from '../lib/settings.js';
+
+export { DEFAULTS };
 
 const KEY = 'propriosys.settings.v1';
 
-export const DEFAULTS = {
-  speech: true,
-  haptics: true,
-  showBoxes: true,
-  rate: 1.1,
-  minScore: 0.55,
-  verbosity: 'normal',
-  earbuds: true, // earbud play/pause button controls the app
-  voiceChosen: false, // first-run question: ProprioSys voice vs. screen reader
-  tutorialDone: false,
-  objectModel: 'fast', // see lib/models.js
-  depthModel: 'off',
-};
-
 function read() {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+    return normalizeSettings(JSON.parse(localStorage.getItem(KEY) || '{}'));
   } catch {
     return DEFAULTS;
   }
@@ -28,7 +17,7 @@ export function useSettings() {
   const [settings, setSettings] = useState(read);
   const update = useCallback((patch) => {
     setSettings((prev) => {
-      const next = { ...prev, ...patch };
+      const next = normalizeSettings({ ...prev, ...patch });
       try {
         localStorage.setItem(KEY, JSON.stringify(next));
       } catch {

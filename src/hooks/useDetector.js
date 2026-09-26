@@ -11,9 +11,11 @@ export function useDetector(base) {
     let cancelled = false;
     setState(INITIAL);
     import('../lib/detector.js')
-      .then((m) => m.createDetector(base))
-      .then(({ model, backend }) => {
-        if (!cancelled) setState({ status: 'ready', model, backend, error: null });
+      .then(async (m) => {
+        const { model, backend } = await m.createDetector(base);
+        if (cancelled) return;
+        m.releaseDetectorsExcept(base);
+        setState({ status: 'ready', model, backend, error: null });
       })
       .catch((err) => {
         console.error(err);

@@ -7,9 +7,10 @@
     "dev": "vite",
     "dev:mobile": "vite --mode https --host",
     "build": "vite build",
-    "preview": "vite preview --host",
+    "preview": "vite preview",
     "icons": "node scripts/gen-icons.mjs",
-    "test": "node --test src/lib/*.test.js"
+    "test": "node --test src/lib/*.test.js",
+    "preview:lan": "vite preview --host"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",

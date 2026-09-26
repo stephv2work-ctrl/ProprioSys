@@ -41,6 +41,15 @@ async function init(base) {
   return { model, backend: tf.getBackend() };
 }
 
+/** Frees every loaded detector except `base` (switching models shouldn't stack GPU memory). */
+export function releaseDetectorsExcept(base) {
+  for (const [key, p] of pending) {
+    if (key === base) continue;
+    pending.delete(key);
+    p.then(({ model }) => model.dispose()).catch(() => {});
+  }
+}
+
 /** Memoised per model so React StrictMode / remounts never load a model twice. */
 export function createDetector(base = 'lite_mobilenet_v2') {
   if (!pending.has(base)) {

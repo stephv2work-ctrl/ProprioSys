@@ -20,12 +20,29 @@ export async function detectBackend() {
   return backend;
 }
 
+async function loadRuntime() {
+  if (T) return T;
+  T = await import('@huggingface/transformers');
+  const onnx = T.env.backends.onnx;
+  // Transformers.js points ONNX Runtime at jsDelivr by default, which means
+  // executing remote code. Clearing wasmPaths makes it use the copy Vite
+  // bundles into our own /assets instead.
+  onnx.wasm.wasmPaths = undefined;
+  // Only fetch model files from the Hugging Face Hub, never probe our origin.
+  T.env.allowLocalModels = false;
+  return T;
+}
+
 export function loadDepthModel(id, onProgress) {
   if (sessions.has(id)) return sessions.get(id);
   const spec = getDepthModel(id);
   const session = (async () => {
-    T ??= await import('@huggingface/transformers');
+    if (!spec.repo) throw new Error(`Unknown depth model: ${id}`);
+    await loadRuntime();
     const { device, f16 } = await detectBackend();
+    // On the slow WASM path, run inference in a worker so a 15–30 s job can't
+    // freeze the page (and the screen reader with it).
+    T.env.backends.onnx.wasm.proxy = device === 'wasm';
     const dtype = device === 'webgpu' && f16 ? spec.dtype.gpuF16 : spec.dtype.fallback;
 
     // Aggregate per-file download progress into one percentage.
@@ -42,9 +59,11 @@ export function loadDepthModel(id, onProgress) {
       onProgress?.(Math.round((loaded / total) * 100));
     };
 
+    // Pinned to a reviewed commit so the model can't change underneath us.
+    const opts = { revision: spec.revision };
     const [proc, model] = await Promise.all([
-      T.AutoProcessor.from_pretrained(spec.repo),
-      T.AutoModelForDepthEstimation.from_pretrained(spec.repo, { device, dtype, progress_callback }),
+      T.AutoProcessor.from_pretrained(spec.repo, opts),
+      T.AutoModelForDepthEstimation.from_pretrained(spec.repo, { ...opts, device, dtype, progress_callback }),
     ]);
 
     // Warm-up: the first run compiles GPU shaders (several seconds). Do it now,
@@ -60,6 +79,14 @@ export function loadDepthModel(id, onProgress) {
   session.catch(() => sessions.delete(id));
   sessions.set(id, session);
   return session;
+}
+
+/** Frees the model's GPU/WASM memory, e.g. when the user turns depth off. */
+export function unloadDepthModel(id) {
+  const session = sessions.get(id);
+  if (!session) return;
+  sessions.delete(id);
+  session.then((s) => s.model.dispose?.()).catch(() => {});
 }
 
 /**
@@ -81,8 +108,7 @@ export async function estimateDepth(id, source) {
     return { data: t.data, width: w, height: h };
   } catch (err) {
     // A failed run can leave the ONNX session unusable; drop it so the next call reloads.
-    sessions.delete(id);
-    s.model.dispose?.();
+    unloadDepthModel(id);
     throw err;
   }
 }

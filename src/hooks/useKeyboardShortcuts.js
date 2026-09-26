@@ -4,7 +4,7 @@ const FIELDS = new Set(['INPUT', 'SELECT', 'TEXTAREA']);
 
 /**
  * Global shortcuts for Bluetooth keyboards and switch-access devices:
- * Space/Enter primary action, ←/→ previous/next, P pause, M mode, S settings, H or ? help.
+ * Space/Enter primary action, ←/→ previous/next, P pause, M mode, V voice on/off, S settings, H or ? help.
  */
 export function useKeyboardShortcuts({ enabled, actionsRef }) {
   useEffect(() => {
@@ -36,6 +36,7 @@ export function useKeyboardShortcuts({ enabled, actionsRef }) {
           const k = e.key.toLowerCase();
           if (k === 'p') a.pause();
           else if (k === 'm') a.toggleMode();
+          else if (k === 'v') a.toggleVoice();
           else if (k === 's') a.settings();
           else if (k === 'h' || k === '?') a.help();
           else return;

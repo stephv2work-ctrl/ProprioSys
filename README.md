@@ -18,8 +18,9 @@ haptic pulses for nearby objects. No frames leave the device.
 ```bash
 npm install
 npm run dev          # http://localhost:5173 (desktop webcam works on localhost)
-npm run dev:mobile   # HTTPS on your LAN IP — open on a phone, accept the self-signed cert
-npm run build && npm run preview
+npm run dev:mobile   # HTTPS on your LAN IP (trusted networks only) — open on a phone, accept the self-signed cert
+npm run build && npm run preview   # localhost only, with the production security headers
+npm run preview:lan  # same, but reachable from other devices on your network
 npm test             # announcement-logic unit tests
 npm run icons        # regenerate PNG icons
 ```
@@ -68,8 +69,26 @@ Settings → **Object model** (Fast / Balanced / Accurate) and **Distance model*
   leave the session unusable, so `depth.js` discards and reloads it.
 - Evaluated but not used: Metric3D ViT-S (fp16-only export rejected its input), Depth Anything V2
   Metric (no browser-ready ONNX export yet), Depth Anything V2 Small (relative depth only).
-- Transformers.js caches weights in Cache Storage; the ONNX Runtime WASM (from jsDelivr) is cached
-  by the service worker.
+- Transformers.js caches weights in Cache Storage. The ONNX Runtime WASM (27 MB) is served from
+  our own `/assets`, not a CDN, and cached by the service worker. The model is pinned to a Hugging
+  Face commit (`revision` in `models.js`); review a new commit before bumping it.
+- On phones without WebGPU, inference runs in a worker (`wasm.proxy`) so the page never freezes.
+- Switching models unloads the previous one; turning depth off frees its memory.
+
+## Safety and privacy
+
+- **No remote code at runtime.** Scripts and WASM come only from our own origin. Other hosts are
+  contacted only for model weights (Google Cloud Storage, Hugging Face), which the
+  Content-Security-Policy in `vercel.json` enforces. `vite preview` serves the same headers.
+- **Headers:** CSP (`script-src 'self' 'wasm-unsafe-eval'`, `frame-ancestors 'none'`), camera-only
+  Permissions-Policy, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, COOP, `nosniff`.
+- **Updates never interrupt.** New versions activate in the background, but the page only reloads
+  when it is on the start screen or hidden (`src/lib/updates.js`). While live, the app says an
+  update is ready.
+- **Photos never leave memory.** Nothing is uploaded or stored; only settings live in
+  `localStorage`, validated on load (`src/lib/settings.js`).
+- **Battery:** the earbud-controls silent audio pauses while the app is hidden, and Pause turns the
+  camera track off.
 
 ## Accessibility
 
@@ -79,7 +98,7 @@ Settings → **Object model** (Fast / Balanced / Accurate) and **Distance model*
 - **Familiar controls:** the whole screen is a tap target, and so is the start screen. Earbud
   play/pause triggers the main action (Media Session API, `src/lib/mediaButtons.js`); double/triple
   press moves through a Canvas walkthrough. Keyboard and switch-access users get Space/Enter,
-  ←/→, P (pause), M (mode), S (settings) and H (help).
+  ←/→ (Canvas items), P (pause), M (mode), V (voice on/off), S (settings) and H (help).
 - **Standard widgets:** Settings and Help are native `<dialog>`s (focus trap, Escape/back
   closes). The Live/Canvas switch is an ARIA radio group with arrow keys. The Canvas step slider
   is a native range input, so screen readers adjust it with their usual swipe up/down gesture.

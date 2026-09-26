@@ -13,6 +13,7 @@ import { haptics } from './lib/haptics.js';
 import { srAnnounce } from './lib/screenReader.js';
 import { mediaButtons } from './lib/mediaButtons.js';
 import { INTRO } from './lib/guide.js';
+import { updates } from './lib/updates.js';
 import { clearCanvas, drawDetections } from './lib/draw.js';
 import StartScreen from './components/StartScreen.jsx';
 import SettingsSheet from './components/SettingsSheet.jsx';
@@ -39,6 +40,7 @@ export default function App() {
   const latestRef = useRef({ preds: [], w: 0, h: 0 });
   const statsRef = useRef({ frames: 0, ms: 0, since: 0 });
   const quietUntilRef = useRef(0); // holds live announcements while the screen reader reads the tutorial
+  const tapsRef = useRef([]); // recent whole-screen taps, for the triple-tap "voice on" gesture
 
   const [settings, updateSettings] = useSettings();
   const settingsRef = useRef(settings);
@@ -60,7 +62,8 @@ export default function App() {
 
   const live = started && camera.status === 'ready';
   const running = live && mode === 'live' && !paused && detector.status === 'ready';
-  useWakeLock(live && !paused);
+  // Pause only applies to Live mode; Canvas keeps the screen on.
+  useWakeLock(live && (mode === 'canvas' || !paused));
 
   /** One output path: our voice, or the user's screen reader — never both. */
   const say = useCallback((text, { urgent = false } = {}) => {
@@ -149,6 +152,22 @@ export default function App() {
     else if (depth.status === 'error') say(depth.error, { urgent: true });
   }, [depth.status, depth.error, say]);
 
+  // A new version activated in the background. Reloading now would stop the
+  // camera mid-use, so wait until the app is idle: on the start screen, or hidden.
+  const [updateReady, setUpdateReady] = useState(updates.isPending);
+  useEffect(() => updates.subscribe(() => setUpdateReady(true)), []);
+  useEffect(() => {
+    if (!updateReady) return;
+    if (!live) {
+      window.location.reload();
+      return;
+    }
+    say('An update is ready. It will install the next time you open the app.');
+    const onHide = () => document.hidden && window.location.reload();
+    document.addEventListener('visibilitychange', onHide);
+    return () => document.removeEventListener('visibilitychange', onHide);
+  }, [updateReady, live, say]);
+
   // First-run tutorial, once the camera is live.
   useEffect(() => {
     if (!live || settings.tutorialDone) return;
@@ -177,9 +196,40 @@ export default function App() {
   const togglePause = () => {
     const next = !paused;
     setPaused(next);
+    // Turn the camera itself off while paused, so its light matches what the user expects.
+    camera.setEnabled(!next);
     speaker.cancel();
-    setCaption(next ? 'Paused' : '');
-    say(next ? 'Paused' : 'Resumed', { urgent: true });
+    setCaption(next ? 'Paused. Camera off.' : '');
+    say(next ? 'Paused. Camera off.' : 'Resumed', { urgent: true });
+  };
+
+  /** Switching the voice off can leave a user without a screen reader in silence, so say how to undo it first. */
+  const setVoice = (on) => {
+    const rate = settingsRef.current.rate;
+    if (on) {
+      updateSettings({ speech: true });
+      speaker.unlock();
+      speaker.say('Voice on.', { urgent: true, rate });
+    } else {
+      speaker.say(
+        'Voice off. Announcements now go to your screen reader. To turn the voice back on, tap the screen three times quickly in Live mode, or press V.',
+        { urgent: true, rate },
+      );
+      updateSettings({ speech: false });
+    }
+  };
+
+  const onScreenTap = () => {
+    if (!settingsRef.current.speech && speaker.supported) {
+      const now = performance.now();
+      tapsRef.current = [...tapsRef.current.filter((t) => now - t < 1200), now];
+      if (tapsRef.current.length >= 3) {
+        tapsRef.current = [];
+        setVoice(true);
+        return;
+      }
+    }
+    describe();
   };
 
   const describe = () => {
@@ -199,6 +249,11 @@ export default function App() {
     if (next === mode) return;
     speaker.cancel();
     setCaption('');
+    // Pause belongs to Live mode; leaving it resumes the camera so Canvas can capture.
+    if (paused) {
+      setPaused(false);
+      camera.setEnabled(true);
+    }
     setMode(next);
     say(next === 'canvas' ? 'Canvas mode. Tap Capture to take a photo.' : 'Live mode.', { urgent: true });
   };
@@ -216,8 +271,12 @@ export default function App() {
   const actions = {
     primary: () => (mode === 'live' ? describe() : canvasControlsRef.current?.primary()),
     pause: () => (mode === 'live' ? togglePause() : canvasControlsRef.current?.togglePlay()),
-    next: () => (mode === 'live' ? describe() : canvasControlsRef.current?.next()),
+    // Arrow keys only step through a Canvas walkthrough; in Live there is nothing to step through.
+    next: () => mode === 'canvas' && canvasControlsRef.current?.next(),
     prev: () => mode === 'canvas' && canvasControlsRef.current?.prev(),
+    // Earbud double press: describe in Live, next item in Canvas.
+    earbudNext: () => (mode === 'live' ? describe() : canvasControlsRef.current?.next()),
+    toggleVoice: () => setVoice(!settingsRef.current.speech),
     toggleMode: () => switchMode(mode === 'live' ? 'canvas' : 'live'),
     settings: () => setSheet('settings'),
     help: () => setSheet('help'),
@@ -233,7 +292,7 @@ export default function App() {
     if (!live || !settings.earbuds) return;
     mediaButtons.setHandlers({
       primary: () => actionsRef.current.primary(),
-      next: () => actionsRef.current.next(),
+      next: () => actionsRef.current.earbudNext(),
       prev: () => actionsRef.current.prev(),
     });
   }, [live, settings.earbuds]);
@@ -274,7 +333,7 @@ export default function App() {
       {live && mode === 'live' && (
         <button
           type="button"
-          onClick={describe}
+          onClick={onScreenTap}
           tabIndex={-1}
           className="absolute inset-0 h-full w-full cursor-pointer focus:outline-none"
           aria-label="Describe everything in view"
@@ -384,6 +443,7 @@ export default function App() {
       {showStart && (
         <StartScreen
           firstRun={!settings.voiceChosen}
+          voiceOff={!settings.speech}
           mode={mode}
           onStart={handleStart}
           starting={camera.status === 'starting'}
@@ -395,7 +455,13 @@ export default function App() {
       )}
 
       {sheet === 'settings' && (
-        <SettingsSheet settings={settings} onChange={updateSettings} depth={depth} onClose={() => setSheet(null)} />
+        <SettingsSheet
+          settings={settings}
+          onChange={updateSettings}
+          onVoiceChange={setVoice}
+          depth={depth}
+          onClose={() => setSheet(null)}
+        />
       )}
       {sheet === 'help' && <HelpSheet settings={settings} onClose={() => setSheet(null)} />}
     </main>

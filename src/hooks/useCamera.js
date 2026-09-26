@@ -67,7 +67,12 @@ export function useCamera(videoRef) {
     }
   }, [videoRef]);
 
+  /** Disabling the track lets the browser turn the camera (and its light) off without losing permission. */
+  const setEnabled = useCallback((on) => {
+    streamRef.current?.getVideoTracks().forEach((t) => (t.enabled = on));
+  }, []);
+
   useEffect(() => () => streamRef.current?.getTracks().forEach((t) => t.stop()), []);
 
-  return { status, error, start, stop };
+  return { status, error, start, stop, setEnabled };
 }

@@ -12,6 +12,7 @@ const secondaryBtn =
  */
 export default function StartScreen({
   firstRun,
+  voiceOff,
   mode,
   onStart,
   starting,
@@ -56,6 +57,7 @@ export default function StartScreen({
           <li>• Hold the phone upright at chest height, camera facing forward.</li>
           <li>• Tap anywhere on the screen to hear everything in view.</li>
           <li>• Runs entirely on your device — no images leave your phone.</li>
+          <li>• The first launch downloads about 18 MB of model data. Use Wi-Fi if your data is limited.</li>
         </ul>
 
         {cameraError && (
@@ -104,6 +106,16 @@ export default function StartScreen({
               >
                 {starting ? 'Starting camera…' : cameraError ? 'Try again' : mode === 'canvas' ? 'Start Canvas' : 'Start'}
               </button>
+              {voiceOff && (
+                <button
+                  type="button"
+                  onClick={() => onStart('app')}
+                  disabled={starting}
+                  className={`${secondaryBtn} min-h-16 px-4 text-lg`}
+                >
+                  Start with ProprioSys voice
+                </button>
+              )}
               <p className="text-center text-sm text-white/60" aria-hidden="true">
                 Or tap anywhere on the screen.
               </p>
